@@ -78,14 +78,20 @@ install_multilib() {
         pushd /tmp > /dev/null
         clear
         echo "[*] Fetching multilib via lftp..."
-        lftp -c "open http://www.slackware.com/~alien/multilib/ ; mirror 15.0"
         
-        upgradepkg --reinstall --install-new 15.0/*.t?z
-        upgradepkg --install-new 15.0/slackware64-compat32/*-compat32/*.t?z
+        # We only proceed to install IF lftp succeeds
+        if lftp -c "open http://www.slackware.com/~alien/multilib/ ; mirror 15.0"; then
+            echo "[*] Download complete. Installing..."
+            upgradepkg --reinstall --install-new 15.0/*.t?z
+            upgradepkg --install-new 15.0/slackware64-compat32/*-compat32/*.t?z
+            dialog --msgbox "Multilib installation complete." 6 40
+        else
+            dialog --title "Error" --msgbox "Failed to fetch Multilib. Check your network or the mirror status." 6 50
+        fi
         
+        # Cleanup happens regardless of success or failure
         rm -rf 15.0/ 
         popd > /dev/null
-        dialog --msgbox "Multilib installation complete." 6 40
     fi
 }
 
@@ -97,16 +103,17 @@ install_slackpkg_plus() {
         rm -f /tmp/slackpkg+*.t?z
         
         echo "[*] Fetching the latest slackpkg+ from Alien Bob's mirror..."
-        # We point to his specific 15.0 or current path to ensure GPG compatibility
+        # Note: If this 404s in the future, check Alien's repo and bump the 1.8.2 version!
         wget https://slackware.nl/slackpkgplus15/pkg/slackpkg+-1.8.2-noarch-1pkgplus.txz -P /tmp/
         
+        # Check if wget actually got the file (exit code 0)
         if [ $? -eq 0 ]; then
             echo "[*] Installing slackpkg+..."
             installpkg /tmp/slackpkg+*.txz
             
             dialog --title "Success" --msgbox "slackpkg+ installed!\n\nACTION REQUIRED:\nEdit /etc/slackpkg/slackpkgplus.conf to enable your repos.\n\nThen run:\nslackpkg update gpg\nslackpkg update" 12 60
         else
-            dialog --title "Error" --msgbox "Failed to download slackpkg+. Check your internet connection." 6 50
+            dialog --title "Download Failed" --msgbox "Failed to download slackpkg+. \n\nEither your internet is down, or Alien Bob updated to a new version (e.g., 1.8.3). Check the URL in the script!" 10 60
         fi
         
         rm -f /tmp/slackpkg+*.txz
