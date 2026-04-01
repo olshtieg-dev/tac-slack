@@ -53,8 +53,23 @@ configure_mirrors() {
     dialog --title "Mirror Selection" --yesno "Would you like to open /etc/slackpkg/mirrors to select a download source?" 7 60
     if [ $? -eq 0 ]; then
         nano /etc/slackpkg/mirrors
+        
+        # 1. Sync the clock (Essential for GPG)
+        dialog --infobox "Syncing system clock..." 5 50
+        ntpdate -u pool.ntp.org 2>/dev/null || rdate -s rdate.cpanel.net
+        
+        # 2. Refresh the package lists
         dialog --infobox "Updating GPG keys and package lists..." 5 50
         slackpkg update gpg && slackpkg update
+        
+        # 3. Bring the core system up to date (Ignoring blacklisted items)
+        # We use 'clear' because slackpkg's output is too long for a dialog box
+        clear
+        echo "--- Upgrading Core System (Ignoring Blacklisted Kernels) ---"
+        slackpkg install-new
+        slackpkg upgrade-all
+        
+        dialog --title "Core Update Complete" --msgbox "System is now current with official mirrors.\n\nYou can now proceed to Multilib or 3rd Party tools." 8 60
     fi
 }
 
