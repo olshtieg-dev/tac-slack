@@ -54,66 +54,100 @@ configure_mirrors() {
     if [ $? -eq 0 ]; then
         nano /etc/slackpkg/mirrors
         
-        # 1. Sync the clock (Essential for GPG)
         dialog --infobox "Syncing system clock..." 5 50
         ntpdate -u pool.ntp.org 2>/dev/null || rdate -s rdate.cpanel.net
         
-        # 2. Refresh the package lists
         dialog --infobox "Updating GPG keys and package lists..." 5 50
         slackpkg update gpg && slackpkg update
         
-        # 3. Bring the core system up to date (Ignoring blacklisted items)
-        # We use 'clear' because slackpkg's output is too long for a dialog box
         clear
         echo "--- Upgrading Core System (Ignoring Blacklisted Kernels) ---"
         slackpkg install-new
         slackpkg upgrade-all
         
-        dialog --title "Core Update Complete" --msgbox "System is now current with official mirrors.\n\nYou can now proceed to Multilib or 3rd Party tools." 8 60
+        # Touch a flag so we know an update occurred
+        touch /tmp/.slack_updated
+        
+        dialog --title "Core Update Complete" --msgbox "System is now current with official mirrors." 8 60
     fi
 }
 
 install_multilib() {
     dialog --title "Multilib" --yesno "Install Multilib (Alien Bob)? Required for 32-bit apps like Steam/Wine." 7 60
     if [ $? -eq 0 ]; then
+        pushd /tmp > /dev/null
         clear
-        echo "[*] Fetching multilib... this uses lftp to mirror the repo."
+        echo "[*] Fetching multilib via lftp..."
         lftp -c "open http://www.slackware.com/~alien/multilib/ ; mirror 15.0"
+        
         upgradepkg --reinstall --install-new 15.0/*.t?z
         upgradepkg --install-new 15.0/slackware64-compat32/*-compat32/*.t?z
+        
         rm -rf 15.0/ 
+        popd > /dev/null
         dialog --msgbox "Multilib installation complete." 6 40
     fi
 }
 
 install_slackpkg_plus() {
-    dialog --title "slackpkg+" --yesno "Install slackpkg+ for 3rd party repo support (Alien/Ponce)?" 7 60
+    dialog --title "slackpkg+ (Alien Bob Edition)" --yesno "Install slackpkg+? \n\nNow maintained by Alien Bob, this is the standard for 3rd-party repo support (Alien/Ponce/Multilib)." 8 65
     if [ $? -eq 0 ]; then
-        wget https://downloads.sourceforge.net/project/slackpkgplus/slackpkg%2B-1.7.0-noarch-1pkgplus.txz -O /tmp/slackpkgplus.txz
-        installpkg /tmp/slackpkgplus.txz
-        dialog --msgbox "Installed. REMEMBER: Edit /etc/slackpkg/slackpkgplus.conf to enable repos." 8 60
+        clear
+        echo "[*] Ensuring /tmp is clean..."
+        rm -f /tmp/slackpkg+*.t?z
+        
+        echo "[*] Fetching the latest slackpkg+ from Alien Bob's mirror..."
+        # We point to his specific 15.0 or current path to ensure GPG compatibility
+        wget https://slackware.nl/slackpkgplus15/pkg/slackpkg+-1.8.2-noarch-1pkgplus.txz -P /tmp/
+        
+        if [ $? -eq 0 ]; then
+            echo "[*] Installing slackpkg+..."
+            installpkg /tmp/slackpkg+*.txz
+            
+            dialog --title "Success" --msgbox "slackpkg+ installed!\n\nACTION REQUIRED:\nEdit /etc/slackpkg/slackpkgplus.conf to enable your repos.\n\nThen run:\nslackpkg update gpg\nslackpkg update" 12 60
+        else
+            dialog --title "Error" --msgbox "Failed to download slackpkg+. Check your internet connection." 6 50
+        fi
+        
+        rm -f /tmp/slackpkg+*.txz
     fi
 }
 
 install_sbotools() {
-    dialog --title "sbotools (Dependency King)" --yesno "Install sbotools? This handles SlackBuild dependencies automatically, keeping the system clean." 8 65
+    dialog --title "sbotools" --yesno "Install sbotools? This handles SlackBuild dependencies automatically." 8 65
     if [ $? -eq 0 ]; then
         clear
-        echo "[*] Cloning sbotools from GitHub..."
         git clone https://github.com/pink-mist/sbotools.git /tmp/sbotools
-        cd /tmp/sbotools
-        
-        echo "[*] Building and installing sbotools..."
-        perl Makefile.PL && make && make install
-        
-        echo "[*] Initializing sbotools config..."
-        # Set to 15.0 by default, feel free to change to 'current'
+        cd /tmp/sbotools && perl Makefile.PL && make && make install
         sboconfig --dist 15.0
-        
         cd - > /dev/null
         rm -rf /tmp/sbotools
+        dialog --msgbox "sbotools installed!" 6 40
+    fi
+}
+
+final_reboot() {
+    if [ -f /tmp/.slack_updated ]; then
+        dialog --title "Reboot Suggestion" \
+               --menu "You've just applied a monstrous influx of updates. While not strictly mandatory, a reboot is highly recommended to ensure all new binaries and libraries are loaded correctly." 12 70 2 \
+               "NOW" "Reboot the system" \
+               "LATER" "I'm a Slacker, I'll do it later" 2> "$TMP_CHOICE"
         
-        dialog --title "Success" --msgbox "sbotools installed!\n\nQuick Commands:\n- sboinstall <pkg>\n- sbocheck\n- sboupgrade --all" 10 50
+        choice=$(cat "$TMP_CHOICE")
+        
+        case "$choice" in
+            NOW)
+                clear
+                echo "Rebooting... See you on the other side of the Slack."
+                sleep 2
+                reboot
+                ;;
+            LATER|*)
+                clear
+                echo "Fair enough. Just remember: if something acts weird, a reboot usually fixes it."
+                sleep 2
+                ;;
+        esac
     fi
 }
 
@@ -121,7 +155,7 @@ install_sbotools() {
 
 while true; do
     dialog --clear --title "Slackware64 Post-Install Housekeeping" \
-        --menu "Select a task. sbotools is recommended for dependency handling." 17 75 8 \
+        --menu "Select a task. Use Up/Down to cycle." 17 75 8 \
         "KERNEL"   "Shield Kernel (Anti-Crash Security)" \
         "VIEW"     "View Blacklist (Educational / Verify Shield)" \
         "MIRRORS"  "Configure Mirrors & Update GPG" \
@@ -143,7 +177,10 @@ while true; do
     esac
 done
 
-# Cleanup
+# Cleanup and Final Check
 rm -f "$TMP_CHOICE"
+final_reboot
+rm -f /tmp/.slack_updated
+
 clear
 echo "--- Housekeeping Complete. Enjoy the Slack! ---"
