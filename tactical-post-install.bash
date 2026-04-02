@@ -69,16 +69,27 @@ configure_mirrors() {
 }
 
 install_slackpkg_plus() {
-    dialog --title "Step 1: Install slackpkg+" --yesno "Fetch and install slackpkg+ (Alien Bob Edition)?" 7 65
+    dialog --title "Step 1: Install slackpkg+" --yesno "Fetch and install slackpkg+ (Alien Bob Edition)?\n\nNote: This will also trigger an 'update', 'install-new', and 'upgrade-all' to ensure your base system is current." 9 65
     if [ $? -eq 0 ]; then
         clear
+        echo "[*] Cleaning /tmp and fetching slackpkg+..."
         rm -f /tmp/slackpkg+*.txz
         wget -v https://slackware.nl/slackpkgplus/pkg/slackpkg+-1.8.2-noarch-1alien.txz -P /tmp/
+        
         if [ $? -eq 0 ]; then
+            echo "[*] Installing slackpkg+ package..."
             installpkg /tmp/slackpkg+*.txz
-            check_status $? "slackpkg+ Installation"
+            
+            echo -e "\n[*] INITIALIZING SYSTEM SYNC (Standard Practice)..."
+            # 1. Update the metadata (now with plus capabilities)
+            # 2. install-new handles any officially added packages
+            # 3. upgrade-all brings the base system to current
+            slackpkg update && slackpkg install-new && slackpkg upgrade-all
+            
+            check_status $? "slackpkg+ Install & Initial System Sync"
+            [ $? -eq 0 ] && touch /tmp/.slack_updated
         else
-            check_status 1 "Download failed."
+            check_status 1 "Download failed. Check your mirror connection."
         fi
         rm -f /tmp/slackpkg+*.txz
     fi
