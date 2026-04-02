@@ -142,46 +142,60 @@ install_sbotools() {
         clear
         echo "[*] Preparing build environment..."
         rm -rf /tmp/sbotools /tmp/sbotools-*.t?z
-        mkdir -p /tmp/sbotools && cd /tmp/sbotools
+        mkdir -p /tmp/sbotools && cd /tmp/sbotools || exit 1
 
         echo "[*] Downloading SlackBuild scripts..."
-        wget https://slackbuilds.org/slackbuilds/15.0/system/sbotools.tar.gz
-        
-        if [ $? -eq 0 ]; then
-            echo "[*] Extracting scripts..."
-            tar -xvf sbotools.tar.gz
-            cd sbotools
-
-            # --- THE MISSING STEP: Download the actual source code ---
-            # The SlackBuild expects the source to be in the same directory
-            echo "[*] Fetching sbotools source code (v4.1.3)..."
-            wget https://pghvlaans.github.io/sbotools/downloads/sbotools-4.1.3.tar.gz
-            
-            if [ $? -eq 0 ]; then
-                echo "[*] Building package..."
-                chmod +x sbotools.SlackBuild
-                ./sbotools.SlackBuild
-                
-                # Installation
-                if ls /tmp/sbotools-*.t?z 1> /dev/null 2>&1; then
-                    echo "[*] Installing package..."
-                    installpkg /tmp/sbotools-*.t?z
-                    STATE=$?
-                    
-                    if [ $STATE -eq 0 ]; then
-                        echo "[*] Initializing sbotools (sbosnap fetch)..."
-                        sboconfig --dist 15.0
-                        sbosnap fetch
-                    fi
-                    check_status $STATE "sbotools Installation"
-                else
-                    check_status 1 "SlackBuild failed to produce a package."
-                fi
-            else
-                check_status 1 "Failed to download sbotools source code."
-            fi
-        else
+        wget -O sbotools.tar.gz https://slackbuilds.org/slackbuilds/15.0/system/sbotools.tar.gz || {
             check_status 1 "Failed to download sbotools SlackBuild scripts."
+            return
+        }
+
+        echo "[*] Extracting scripts..."
+        tar -xvf sbotools.tar.gz || {
+            check_status 1 "Failed to extract SlackBuild scripts."
+            return
+        }
+
+        cd sbotools || exit 1
+
+        # --- Download the actual source code ---
+        echo "[*] Fetching sbotools source code (v4.1.3)..."
+        wget -O sbotools-4.1.3.tar.gz \
+        https://pghvlaans.github.io/sbotools/downloads/sbotools-4.1.3.tar.gz || {
+            check_status 1 "Failed to download sbotools source code."
+            return
+        }
+
+        # Verify the file exists and is valid
+        if [ ! -f sbotools-4.1.3.tar.gz ]; then
+            check_status 1 "Source tarball missing after download."
+            return
+        fi
+
+        if ! file sbotools-4.1.3.tar.gz | grep -q "gzip compressed"; then
+            check_status 1 "Downloaded file is not a valid tar.gz (possible HTML download)."
+            return
+        fi
+
+        echo "[*] Building package..."
+        chmod +x sbotools.SlackBuild
+        ./sbotools.SlackBuild
+
+        # Installation
+        if ls /tmp/sbotools-*.t?z 1> /dev/null 2>&1; then
+            echo "[*] Installing package..."
+            installpkg /tmp/sbotools-*.t?z
+            STATE=$?
+
+            if [ $STATE -eq 0 ]; then
+                echo "[*] Initializing sbotools (sbosnap fetch)..."
+                sboconfig --dist 15.0
+                sbosnap fetch
+            fi
+
+            check_status $STATE "sbotools Installation"
+        else
+            check_status 1 "SlackBuild failed to produce a package."
         fi
 
         # Cleanup
