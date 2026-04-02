@@ -133,22 +133,49 @@ install_multilib() {
         fi
     fi
 }
+## we need to do a slackpkg upgrade-all after this to get the new multilib packages, but we can do that in the main menu after all the config is done. We just want to make sure the user has the option to do it manually if they want to review the changes first.
+
+## 
 
 install_sbotools() {
-    dialog --title "sbotools" --yesno "Clone and build sbotools?" 7 65
+    dialog --title "sbotools" --yesno "Fetch and build sbotools via git-SlackBuild?\n\n(This creates a clean, trackable Slackware package)." 8 65
     if [ $? -eq 0 ]; then
         clear
-        rm -rf /tmp/sbotools
-        git clone --verbose https://github.com/pink-mist/sbotools.git /tmp/sbotools
+        echo "[*] Cleaning previous build artifacts..."
+        rm -rf /tmp/sbotools-build
+        rm -f /tmp/sbotools-*.t?z 
+
+        echo "[*] Fetching the SlackBuild repository..."
+        git clone --verbose https://github.com/pghvlaans/sbotools-git-slackbuild.git /tmp/sbotools-build
+        
         if [ $? -eq 0 ]; then
-            cd /tmp/sbotools && perl Makefile.PL && make && make install
-            STATE=$?
-            sboconfig --dist 15.0
+            echo "[*] Executing SlackBuild (Compiling source into .txz)..."
+            cd /tmp/sbotools-build
+            chmod +x sbotools.SlackBuild
+            ./sbotools.SlackBuild
+            
+            # Standard SlackBuilds output their finished package directly to /tmp
+            PKG_FILE=$(ls /tmp/sbotools-*.t?z 2>/dev/null | head -n 1)
+            
+            if [ -n "$PKG_FILE" ] && [ -f "$PKG_FILE" ]; then
+                echo -e "\n[*] SlackBuild successful. Installing $PKG_FILE..."
+                installpkg "$PKG_FILE"
+                STATE=$?
+                
+                # Configure the repo version if the install succeeded
+                [ $STATE -eq 0 ] && sboconfig --dist 15.0
+                
+                check_status $STATE "sbotools SlackBuild & Install"
+            else
+                check_status 1 "SlackBuild failed to generate a package in /tmp."
+            fi
+            
+            # Clean up the mess
             cd - > /dev/null
-            rm -rf /tmp/sbotools
-            check_status $STATE "sbotools Build/Install"
+            rm -rf /tmp/sbotools-build
+            rm -f /tmp/sbotools-*.t?z
         else
-            check_status 1 "Git clone failed."
+            check_status 1 "Git clone of the SlackBuild repository failed."
         fi
     fi
 }

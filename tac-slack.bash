@@ -1,6 +1,8 @@
 #!/bin/bash
 # Tac-Slack: The Universal Package Ninja Dispatcher
 
+# upgradepkg --install-new ## do this later!!
+
 # --- Functions ---
 
 usage() {
