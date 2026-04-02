@@ -85,7 +85,7 @@ install_slackpkg_plus() {
             # 2. install-new handles any officially added packages
             # 3. upgrade-all brings the base system to current
             slackpkg update && slackpkg install-new && slackpkg upgrade-all
-            
+            ### need to put a check here for "looking for new packages" and "nothing to upgrade" and if this prints then install is successful. 
             check_status $? "slackpkg+ Install & Initial System Sync"
             [ $? -eq 0 ] && touch /tmp/.slack_updated
         else
@@ -133,9 +133,7 @@ install_multilib() {
         fi
     fi
 }
-## we need to do a slackpkg upgrade-all after this to get the new multilib packages, but we can do that in the main menu after all the config is done. We just want to make sure the user has the option to do it manually if they want to review the changes first.
 
-## 
 install_sbotools() {
     dialog --title "sbotools" --yesno "Download and build sbotools from SlackBuilds.org?\n\n(Recommended for stable Slackware 15.0 systems)." 8 65
     if [ $? -eq 0 ]; then
