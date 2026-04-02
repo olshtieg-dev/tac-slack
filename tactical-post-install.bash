@@ -72,51 +72,51 @@ configure_mirrors() {
     fi
 }
 
-install_multilib() {
-    dialog --title "Multilib" --yesno "Install Multilib (Alien Bob)? Required for 32-bit apps like Steam/Wine." 7 60
-    if [ $? -eq 0 ]; then
-        pushd /tmp > /dev/null
-        clear
-        echo "[*] Fetching multilib via lftp..."
-        
-        # We only proceed to install IF lftp succeeds
-        if lftp -c "open http://www.slackware.com/~alien/multilib/ ; mirror 15.0"; then
-            echo "[*] Download complete. Installing..."
-            upgradepkg --reinstall --install-new 15.0/*.t?z
-            upgradepkg --install-new 15.0/slackware64-compat32/*-compat32/*.t?z
-            dialog --msgbox "Multilib installation complete." 6 40
-        else
-            dialog --title "Error" --msgbox "Failed to fetch Multilib. Check your network or the mirror status." 6 50
-        fi
-        
-        # Cleanup happens regardless of success or failure
-        rm -rf 15.0/ 
-        popd > /dev/null
-    fi
-}
-
 install_slackpkg_plus() {
-    dialog --title "slackpkg+ (Alien Bob Edition)" --yesno "Install slackpkg+? \n\nNow maintained by Alien Bob, this is the standard for 3rd-party repo support (Alien/Ponce/Multilib)." 8 65
+    dialog --title "slackpkg+ (Alien Bob Edition)" --yesno "Install slackpkg+?\n\nThis must be done BEFORE installing Multilib. It upgrades slackpkg to handle 3rd party repos." 9 65
     if [ $? -eq 0 ]; then
         clear
         echo "[*] Ensuring /tmp is clean..."
         rm -f /tmp/slackpkg+*.t?z
         
         echo "[*] Fetching the latest slackpkg+ from Alien Bob's mirror..."
-        # Note: If this 404s in the future, check Alien's repo and bump the 1.8.2 version!
         wget https://slackware.nl/slackpkgplus15/pkg/slackpkg+-1.8.2-noarch-1pkgplus.txz -P /tmp/
         
-        # Check if wget actually got the file (exit code 0)
         if [ $? -eq 0 ]; then
             echo "[*] Installing slackpkg+..."
             installpkg /tmp/slackpkg+*.txz
             
-            dialog --title "Success" --msgbox "slackpkg+ installed!\n\nACTION REQUIRED:\nEdit /etc/slackpkg/slackpkgplus.conf to enable your repos.\n\nThen run:\nslackpkg update gpg\nslackpkg update" 12 60
+            # THE NANO HANDOFF BRIEFING
+            dialog --title "ATTENTION: Nano Handoff" --msgbox "slackpkg+ is installed!\n\nI am now handing you off to Nano to edit: /etc/slackpkg/slackpkgplus.conf\n\nYOUR MISSION:\n1. Find REPOSPLUS=(...) and add inside the brackets: multilib alienbob\n2. Find MIRRORS_PRIORITY=(...) and add inside the brackets: multilib alienbob\n3. Scroll down and verify MIRROR_multilib=... has no '#' in front of it.\n\nSave (Ctrl+O, Enter) and Exit (Ctrl+X) when finished." 18 75
+            
+            # Execute Nano
+            nano /etc/slackpkg/slackpkgplus.conf
+            
+            dialog --title "Success" --msgbox "slackpkg+ configuration complete.\nYou are now cleared to run the Multilib installer from the main menu." 7 65
         else
-            dialog --title "Download Failed" --msgbox "Failed to download slackpkg+. \n\nEither your internet is down, or Alien Bob updated to a new version (e.g., 1.8.3). Check the URL in the script!" 10 60
+            dialog --title "Download Failed" --msgbox "Failed to download slackpkg+. \n\nCheck network connection or verify Alien Bob hasn't bumped the version past 1.8.2." 10 60
         fi
         
         rm -f /tmp/slackpkg+*.txz
+    fi
+}
+
+install_multilib() {
+    dialog --title "Multilib (Via slackpkg+)" --yesno "Install Multilib?\n\nCRITICAL: You must have completed the 'Install slackpkg+' step and edited the configuration file first!" 9 65
+    if [ $? -eq 0 ]; then
+        clear
+        echo "[*] Importing new GPG keys (Alien Bob / Multilib)..."
+        slackpkg update gpg
+        
+        echo "[*] Syncing multi-repo package lists..."
+        slackpkg update
+        
+        echo "[*] Installing 32-bit compatibility libraries..."
+        # This triggers slackpkg+ to pull all multilib packages automatically
+        slackpkg install multilib
+        
+        touch /tmp/.slack_updated
+        dialog --msgbox "Multilib installation complete!" 6 40
     fi
 }
 
@@ -136,7 +136,7 @@ install_sbotools() {
 final_reboot() {
     if [ -f /tmp/.slack_updated ]; then
         dialog --title "Reboot Suggestion" \
-               --menu "You've just applied a monstrous influx of updates. While not strictly mandatory, a reboot is highly recommended to ensure all new binaries and libraries are loaded correctly." 12 70 2 \
+               --menu "You've applied core updates or multilib libraries. A reboot is highly recommended." 10 70 2 \
                "NOW" "Reboot the system" \
                "LATER" "I'm a Slacker, I'll do it later" 2> "$TMP_CHOICE"
         
@@ -161,14 +161,14 @@ final_reboot() {
 # --- Main Menu Loop ---
 
 while true; do
-    dialog --clear --title "Slackware64 Post-Install Housekeeping" \
-        --menu "Select a task. Use Up/Down to cycle." 17 75 8 \
+    dialog --clear --title "SlackTix Forge Housekeeping" \
+        --menu "Select a task. Use Up/Down to cycle." 18 75 8 \
         "KERNEL"   "Shield Kernel (Anti-Crash Security)" \
-        "VIEW"     "View Blacklist (Educational / Verify Shield)" \
-        "MIRRORS"  "Configure Mirrors & Update GPG" \
-        "MULTILIB" "Install Multilib (Alien Bob's Repo)" \
-        "PLUS"     "Install slackpkg+ (3rd Party Support)" \
-        "SBOTOOLS" "Install sbotools (Auto-Dependency Logic)" \
+        "VIEW"     "View Blacklist (Verify Shield)" \
+        "MIRRORS"  "Configure Official Mirrors & Update" \
+        "PLUS"     "Install slackpkg+ (DO THIS FIRST)" \
+        "MULTILIB" "Install Multilib (Via slackpkg+)" \
+        "SBOTOOLS" "Install sbotools (Auto-Dependency)" \
         "EXIT"     "Finish and Exit to Shell" 2> "$TMP_CHOICE"
 
     choice=$(cat "$TMP_CHOICE")
@@ -177,8 +177,8 @@ while true; do
         KERNEL)   shield_kernel ;;
         VIEW)     view_blacklist ;;
         MIRRORS)  configure_mirrors ;;
-        MULTILIB) install_multilib ;;
         PLUS)     install_slackpkg_plus ;;
+        MULTILIB) install_multilib ;;
         SBOTOOLS) install_sbotools ;;
         EXIT|"")  break ;;
     esac
@@ -190,4 +190,4 @@ final_reboot
 rm -f /tmp/.slack_updated
 
 clear
-echo "--- Housekeeping Complete. Enjoy the Slack! ---"
+echo "--- Housekeeping Complete. The Eagle is prepped. ---"
