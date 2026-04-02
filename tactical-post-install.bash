@@ -73,7 +73,7 @@ configure_mirrors() {
 }
 
 install_slackpkg_plus() {
-    dialog --title "slackpkg+ (Alien Bob Edition)" --yesno "Install slackpkg+?\n\nThis must be done BEFORE installing Multilib. It upgrades slackpkg to handle 3rd party repos." 9 65
+    dialog --title "slackpkg+ (Alien Bob Edition)" --yesno "Install slackpkg+?\n\nThis fetches the package and installs it. You will configure it in the next step." 8 65
     if [ $? -eq 0 ]; then
         clear
         echo "[*] Ensuring /tmp is clean..."
@@ -86,13 +86,7 @@ install_slackpkg_plus() {
             echo "[*] Installing slackpkg+..."
             installpkg /tmp/slackpkg+*.txz
             
-            # THE NANO HANDOFF BRIEFING
-            dialog --title "ATTENTION: Nano Handoff" --msgbox "slackpkg+ is installed!\n\nI am now handing you off to Nano to edit: /etc/slackpkg/slackpkgplus.conf\n\nYOUR MISSION:\n1. Find REPOSPLUS=(...) and add inside the brackets: multilib alienbob\n2. Find MIRRORS_PRIORITY=(...) and add inside the brackets: multilib alienbob\n3. Scroll down and verify MIRROR_multilib=... has no '#' in front of it.\n\nSave (Ctrl+O, Enter) and Exit (Ctrl+X) when finished." 18 75
-            
-            # Execute Nano
-            nano /etc/slackpkg/slackpkgplus.conf
-            
-            dialog --title "Success" --msgbox "slackpkg+ configuration complete.\nYou are now cleared to run the Multilib installer from the main menu." 7 65
+            dialog --title "Success" --msgbox "slackpkg+ installed!\n\nNext Step: Run 'Configure slackpkg+' from the main menu to set up your 3rd-party mirrors." 8 65
         else
             dialog --title "Download Failed" --msgbox "Failed to download slackpkg+. \n\nCheck network connection or verify Alien Bob hasn't bumped the version past 1.8.2." 10 60
         fi
@@ -101,8 +95,17 @@ install_slackpkg_plus() {
     fi
 }
 
+configure_slackpkg_plus() {
+    dialog --title "ATTENTION: Nano Handoff" --msgbox "I am now handing you off to Nano to edit: /etc/slackpkg/slackpkgplus.conf\n\nYOUR MISSION:\n1. Find REPOSPLUS=(...) and add inside the brackets: multilib alienbob\n2. Find MIRRORS_PRIORITY=(...) and add inside the brackets: multilib alienbob\n3. Scroll down and verify MIRROR_multilib=... has no '#' in front of it.\n\nSave (Ctrl+O, Enter) and Exit (Ctrl+X) when finished." 16 75
+    
+    # Execute Nano
+    nano /etc/slackpkg/slackpkgplus.conf
+    
+    dialog --title "Success" --msgbox "slackpkg+ configuration complete.\nYou are now cleared to run the Multilib installer from the main menu." 7 65
+}
+
 install_multilib() {
-    dialog --title "Multilib (Via slackpkg+)" --yesno "Install Multilib?\n\nCRITICAL: You must have completed the 'Install slackpkg+' step and edited the configuration file first!" 9 65
+    dialog --title "Multilib (Via slackpkg+)" --yesno "Install Multilib?\n\nCRITICAL: You must have completed the 'Install slackpkg+' AND 'Configure slackpkg+' steps first!" 8 65
     if [ $? -eq 0 ]; then
         clear
         echo "[*] Importing new GPG keys (Alien Bob / Multilib)..."
@@ -162,11 +165,12 @@ final_reboot() {
 
 while true; do
     dialog --clear --title "SlackTix Forge Housekeeping" \
-        --menu "Select a task. Use Up/Down to cycle." 18 75 8 \
+        --menu "Select a task. Use Up/Down to cycle." 19 75 9 \
         "KERNEL"   "Shield Kernel (Anti-Crash Security)" \
         "VIEW"     "View Blacklist (Verify Shield)" \
         "MIRRORS"  "Configure Official Mirrors & Update" \
         "PLUS"     "Install slackpkg+ (DO THIS FIRST)" \
+        "PLUSCONF" "Configure slackpkg+ (Nano Handoff)" \
         "MULTILIB" "Install Multilib (Via slackpkg+)" \
         "SBOTOOLS" "Install sbotools (Auto-Dependency)" \
         "EXIT"     "Finish and Exit to Shell" 2> "$TMP_CHOICE"
@@ -178,6 +182,7 @@ while true; do
         VIEW)     view_blacklist ;;
         MIRRORS)  configure_mirrors ;;
         PLUS)     install_slackpkg_plus ;;
+        PLUSCONF) configure_slackpkg_plus ;;
         MULTILIB) install_multilib ;;
         SBOTOOLS) install_sbotools ;;
         EXIT|"")  break ;;
