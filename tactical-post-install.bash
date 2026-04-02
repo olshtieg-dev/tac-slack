@@ -138,45 +138,45 @@ install_multilib() {
 ## 
 
 install_sbotools() {
-    dialog --title "sbotools" --yesno "Fetch and build sbotools via git-SlackBuild?\n\n(This creates a clean, trackable Slackware package)." 8 65
+    dialog --title "sbotools" --yesno "Download and build sbotools from SlackBuilds.org?\n\n(Recommended for stable Slackware 15.0 systems)." 8 65
     if [ $? -eq 0 ]; then
         clear
-        echo "[*] Cleaning previous build artifacts..."
-        rm -rf /tmp/sbotools-build
-        rm -f /tmp/sbotools-*.t?z 
+        echo "[*] Preparing build environment..."
+        rm -rf /tmp/sbotools /tmp/sbotools-*.t?z
+        mkdir -p /tmp/sbotools && cd /tmp/sbotools
 
-        echo "[*] Fetching the SlackBuild repository..."
-        git clone --verbose https://github.com/pghvlaans/sbotools-git-slackbuild.git /tmp/sbotools-build
+        echo "[*] Downloading source from SlackBuilds.org..."
+        wget https://slackbuilds.org/slackbuilds/15.0/system/sbotools.tar.gz
         
         if [ $? -eq 0 ]; then
-            echo "[*] Executing SlackBuild (Compiling source into .txz)..."
-            cd /tmp/sbotools-build
+            echo "[*] Extracting and building..."
+            tar -xvf sbotools.tar.gz
+            cd sbotools
             chmod +x sbotools.SlackBuild
             ./sbotools.SlackBuild
             
-            # Standard SlackBuilds output their finished package directly to /tmp
-            PKG_FILE=$(ls /tmp/sbotools-*.t?z 2>/dev/null | head -n 1)
-            
-            if [ -n "$PKG_FILE" ] && [ -f "$PKG_FILE" ]; then
-                echo -e "\n[*] SlackBuild successful. Installing $PKG_FILE..."
-                installpkg "$PKG_FILE"
+            # Installation
+            if ls /tmp/sbotools-*.t?z 1> /dev/null 2>&1; then
+                echo "[*] Installing package..."
+                installpkg /tmp/sbotools-*.t?z
                 STATE=$?
                 
-                # Configure the repo version if the install succeeded
-                [ $STATE -eq 0 ] && sboconfig --dist 15.0
+                if [ $STATE -eq 0 ]; then
+                    echo "[*] Initializing sbotools (sbosnap fetch)..."
+                    sboconfig --dist 15.0
+                    sbosnap fetch
+                fi
                 
-                check_status $STATE "sbotools SlackBuild & Install"
+                check_status $STATE "sbotools Installation"
             else
-                check_status 1 "SlackBuild failed to generate a package in /tmp."
+                check_status 1 "SlackBuild failed to produce a package."
             fi
-            
-            # Clean up the mess
-            cd - > /dev/null
-            rm -rf /tmp/sbotools-build
-            rm -f /tmp/sbotools-*.t?z
         else
-            check_status 1 "Git clone of the SlackBuild repository failed."
+            check_status 1 "Failed to download sbotools.tar.gz"
         fi
+
+        # Cleanup
+        cd /tmp && rm -rf /tmp/sbotools
     fi
 }
 
