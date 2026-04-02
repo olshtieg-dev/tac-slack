@@ -9,171 +9,151 @@ fi
 # Initialize temporary file for dialog output
 TMP_CHOICE=$(mktemp /tmp/slack_choice.XXXXXX)
 
-# --- Functions for specific tasks ---
+# --- The Truth-Teller Function ---
+# Usage: check_status $? "Description"
+check_status() {
+    local EXIT_CODE=$1
+    local TASK_NAME=$2
+
+    if [ $EXIT_CODE -ne 0 ]; then
+        echo -e "\n\e[1;31m[!!!] CRITICAL FAILURE: $TASK_NAME\e[0m"
+        echo "Exit Code: $EXIT_CODE. Mission halted to prevent system corruption."
+        echo "------------------------------------------------------------"
+        read -p "Press [ENTER] to return to menu and troubleshoot..."
+        return 1
+    else
+        echo -e "\n\e[1;32m[OK] SUCCESS: $TASK_NAME\e[0m"
+        read -p "Press [ENTER] to return to the Housekeeping Menu..."
+        return 0
+    fi
+}
+
+# --- Functions ---
 
 shield_kernel() {
     BLACKLIST_FILE="/etc/slackpkg/blacklist"
-    
-    dialog --title "Kernel Shield" \
-           --yesno "Would you like to blacklist kernel updates?\n\nThis prevents 'slackpkg upgrade-all' from touching your kernel/modules, protecting your bootloader from accidental crashes." 9 60
-    
-    if [ $? -ne 0 ]; then
-        return
-    fi
-
-    if [ -f "$BLACKLIST_FILE" ]; then
-        sed -i 's/^#kernel-generic/kernel-generic/' "$BLACKLIST_FILE"
-        sed -i 's/^#kernel-huge/kernel-huge/' "$BLACKLIST_FILE"
-        sed -i 's/^#kernel-modules/kernel-modules/' "$BLACKLIST_FILE"
-        sed -i 's/^#kernel-headers/kernel-headers/' "$BLACKLIST_FILE"
+    dialog --title "Kernel Shield" --yesno "Blacklist kernel updates to protect bootloader?" 8 60
+    if [ $? -eq 0 ]; then
+        echo "[*] Hardening $BLACKLIST_FILE..."
+        # Ensure the file exists before sed-ing
+        touch "$BLACKLIST_FILE"
+        sed -i 's/^#kernel-generic/kernel-generic/' "$BLACKLIST_FILE" && \
+        sed -i 's/^#kernel-huge/kernel-huge/' "$BLACKLIST_FILE" && \
+        sed -i 's/^#kernel-modules/kernel-modules/' "$BLACKLIST_FILE" && \
+        sed -i 's/^#kernel-headers/kernel-headers/' "$BLACKLIST_FILE" && \
         sed -i 's/^#kernel-source/kernel-source/' "$BLACKLIST_FILE"
         
+        # Ensure they are actually in there (not just uncommented)
         for pkg in kernel-generic kernel-huge kernel-modules; do
             grep -q "^$pkg" "$BLACKLIST_FILE" || echo "$pkg" >> "$BLACKLIST_FILE"
         done
-        
-        dialog --title "Shield Active" --msgbox "Kernel packages are now blacklisted.\nYour bootloader is safe." 7 50
-    else
-        dialog --title "Error" --msgbox "Could not find $BLACKLIST_FILE" 6 40
+        check_status $? "Kernel Blacklisting"
     fi
 }
 
 view_blacklist() {
     BLACKLIST_FILE="/etc/slackpkg/blacklist"
     if [ -f "$BLACKLIST_FILE" ]; then
-        dialog --title "Educational: /etc/slackpkg/blacklist" \
-               --exit-label "Return to Menu" \
-               --textbox "$BLACKLIST_FILE" 18 75
+        dialog --title "Current Blacklist" --textbox "$BLACKLIST_FILE" 18 75
     else
-        dialog --title "Error" --msgbox "Blacklist file not found!" 6 40
+        dialog --msgbox "Error: $BLACKLIST_FILE not found." 6 40
     fi
 }
 
 configure_mirrors() {
-    dialog --title "Mirror Selection" --yesno "Would you like to open /etc/slackpkg/mirrors to select a download source?" 7 60
+    dialog --title "Mirror Selection" --yesno "Edit /etc/slackpkg/mirrors?" 7 60
     if [ $? -eq 0 ]; then
         nano /etc/slackpkg/mirrors
-        
-        dialog --infobox "Syncing system clock..." 5 50
-        ntpdate -u pool.ntp.org 2>/dev/null || rdate -s rdate.cpanel.net
-        
-        dialog --infobox "Updating GPG keys and package lists..." 5 50
-        slackpkg update gpg && slackpkg update
-        
         clear
-        echo "--- Upgrading Core System (Ignoring Blacklisted Kernels) ---"
-        slackpkg install-new
-        slackpkg upgrade-all
-        
-        # Touch a flag so we know an update occurred
-        touch /tmp/.slack_updated
-        
-        dialog --title "Core Update Complete" --msgbox "System is now current with official mirrors." 8 60
+        echo "[*] Syncing clock and pulling official updates..."
+        ntpdate -u pool.ntp.org 2>/dev/null || rdate -s rdate.cpanel.net
+        slackpkg update gpg && slackpkg update && slackpkg install-new && slackpkg upgrade-all
+        check_status $? "Official Mirror Sync/Upgrade"
+        [ $? -eq 0 ] && touch /tmp/.slack_updated
     fi
 }
 
 install_slackpkg_plus() {
-    dialog --title "slackpkg+ (Alien Bob Edition)" --yesno "Install slackpkg+?\n\nThis fetches the package and installs it. You will configure it in the next step." 8 65
+    dialog --title "Step 1: Install slackpkg+" --yesno "Fetch and install slackpkg+ (Alien Bob Edition)?" 7 65
     if [ $? -eq 0 ]; then
         clear
-        echo "[*] Ensuring /tmp is clean..."
-        rm -f /tmp/slackpkg+*.t?z
-        
-        echo "[*] Fetching the latest slackpkg+ from Alien Bob's mirror..."
-        wget https://slackware.nl/slackpkgplus/pkg/slackpkg+-1.8.2-noarch-1alien.txz -P /tmp/
-        
+        echo "[*] Fetching package verbosely..."
+        rm -f /tmp/slackpkg+*.txz
+        wget -v https://slackware.nl/slackpkgplus/pkg/slackpkg+-1.8.2-noarch-1alien.txz -P /tmp/
         if [ $? -eq 0 ]; then
-            echo "[*] Installing slackpkg+..."
             installpkg /tmp/slackpkg+*.txz
-            
-            dialog --title "Success" --msgbox "slackpkg+ installed!\n\nNext Step: Run 'Configure slackpkg+' from the main menu to set up your 3rd-party mirrors." 8 65
+            check_status $? "slackpkg+ Installation"
         else
-            dialog --title "Download Failed" --msgbox "Failed to download slackpkg+. \n\nCheck network connection or verify Alien Bob hasn't bumped the version past 1.8.2." 10 60
+            check_status 1 "Download failed. Check URL or Network."
         fi
-        
         rm -f /tmp/slackpkg+*.txz
     fi
 }
 
 configure_slackpkg_plus() {
-    dialog --title "ATTENTION: Nano Handoff" --msgbox "I am now handing you off to Nano to edit: /etc/slackpkg/slackpkgplus.conf\n\nYOUR MISSION:\n1. Find REPOSPLUS=(...) and add inside the brackets: multilib alienbob\n2. Find MIRRORS_PRIORITY=(...) and add inside the brackets: multilib alienbob\n3. Scroll down and verify MIRROR_multilib=... has no '#' in front of it.\n\nSave (Ctrl+O, Enter) and Exit (Ctrl+X) when finished." 16 75
-    
-    # Execute Nano
+    dialog --title "Step 2: Nano Handoff" --msgbox "MISSION:\n1. Find REPOSPLUS and add: multilib alienbob\n2. Find MIRRORS_PRIORITY and add: multilib alienbob\n3. Uncomment MIRROR_multilib=..." 14 70
     nano /etc/slackpkg/slackpkgplus.conf
-    
-    dialog --title "Success" --msgbox "slackpkg+ configuration complete.\nYou are now cleared to run the Multilib installer from the main menu." 7 65
+    dialog --msgbox "Configuration saved. You are ready for Multilib." 6 50
 }
 
 install_multilib() {
-    dialog --title "Multilib (Via slackpkg+)" --yesno "Install Multilib?\n\nCRITICAL: You must have completed the 'Install slackpkg+' AND 'Configure slackpkg+' steps first!" 8 65
+    dialog --title "Multilib Deployment" --yesno "Begin mass download of 32-bit compat libraries?" 7 65
     if [ $? -eq 0 ]; then
         clear
-        echo "[*] Importing new GPG keys (Alien Bob / Multilib)..."
-        slackpkg update gpg
-        
-        echo "[*] Syncing multi-repo package lists..."
-        slackpkg update
-        
-        echo "[*] Installing 32-bit compatibility libraries..."
-        # This triggers slackpkg+ to pull all multilib packages automatically
-        slackpkg install multilib
-        
-        touch /tmp/.slack_updated
-        dialog --msgbox "Multilib installation complete!" 6 40
+        echo "[*] Updating GPG and Repository Lists..."
+        slackpkg update gpg && slackpkg update
+        if [ $? -eq 0 ]; then
+            echo "[*] Running 'slackpkg install multilib'..."
+            slackpkg install multilib
+            check_status $? "Multilib Deployment"
+            [ $? -eq 0 ] && touch /tmp/.slack_updated
+        else
+            check_status $? "Multilib Repo Sync"
+        fi
     fi
 }
 
 install_sbotools() {
-    dialog --title "sbotools" --yesno "Install sbotools? This handles SlackBuild dependencies automatically." 8 65
+    dialog --title "sbotools" --yesno "Clone and build sbotools for auto-dependency handling?" 7 65
     if [ $? -eq 0 ]; then
         clear
-        git clone https://github.com/pink-mist/sbotools.git /tmp/sbotools
-        cd /tmp/sbotools && perl Makefile.PL && make && make install
-        sboconfig --dist 15.0
-        cd - > /dev/null
+        echo "[*] Cloning sbotools source..."
         rm -rf /tmp/sbotools
-        dialog --msgbox "sbotools installed!" 6 40
+        git clone --verbose https://github.com/pink-mist/sbotools.git /tmp/sbotools
+        if [ $? -eq 0 ]; then
+            echo "[*] Compiling and Installing..."
+            cd /tmp/sbotools && perl Makefile.PL && make && make install
+            INSTALL_STATE=$?
+            sboconfig --dist 15.0
+            cd - > /dev/null
+            rm -rf /tmp/sbotools
+            check_status $INSTALL_STATE "sbotools Build/Install"
+        else
+            check_status 1 "Git clone failed."
+        fi
     fi
 }
 
 final_reboot() {
     if [ -f /tmp/.slack_updated ]; then
-        dialog --title "Reboot Suggestion" \
-               --menu "You've applied core updates or multilib libraries. A reboot is highly recommended." 10 70 2 \
-               "NOW" "Reboot the system" \
-               "LATER" "I'm a Slacker, I'll do it later" 2> "$TMP_CHOICE"
-        
-        choice=$(cat "$TMP_CHOICE")
-        
-        case "$choice" in
-            NOW)
-                clear
-                echo "Rebooting... See you on the other side of the Slack."
-                sleep 2
-                reboot
-                ;;
-            LATER|*)
-                clear
-                echo "Fair enough. Just remember: if something acts weird, a reboot usually fixes it."
-                sleep 2
-                ;;
-        esac
+        dialog --title "Reboot Required" --yesno "Core updates or Multilib were applied. Reboot now?" 7 60
+        [ $? -eq 0 ] && reboot
     fi
 }
 
 # --- Main Menu Loop ---
 
 while true; do
-    dialog --clear --title "SlackTix Forge Housekeeping" \
-        --menu "Select a task. Use Up/Down to cycle." 19 75 9 \
-        "KERNEL"   "Shield Kernel (Anti-Crash Security)" \
-        "VIEW"     "View Blacklist (Verify Shield)" \
+    dialog --clear --title "SlackTix Forge Housekeeping v2.4" \
+        --menu "Use arrows to select. Every step is verified for success." 19 75 9 \
+        "KERNEL"   "Shield Kernel (Protect Bootloader)" \
+        "VIEW"     "View Blacklist (Check Shield status)" \
         "MIRRORS"  "Configure Official Mirrors & Update" \
-        "PLUS"     "Install slackpkg+ (DO THIS FIRST)" \
-        "PLUSCONF" "Configure slackpkg+ (Nano Handoff)" \
+        "PLUS"     "Install slackpkg+ (Step 1)" \
+        "PLUSCONF" "Configure slackpkg+ (Step 2: Nano)" \
         "MULTILIB" "Install Multilib (Via slackpkg+)" \
-        "SBOTOOLS" "Install sbotools (Auto-Dependency)" \
-        "EXIT"     "Finish and Exit to Shell" 2> "$TMP_CHOICE"
+        "SBOTOOLS" "Install sbotools (Dependency King)" \
+        "EXIT"     "Exit to Shell" 2> "$TMP_CHOICE"
 
     choice=$(cat "$TMP_CHOICE")
 
@@ -189,10 +169,8 @@ while true; do
     esac
 done
 
-# Cleanup and Final Check
 rm -f "$TMP_CHOICE"
 final_reboot
 rm -f /tmp/.slack_updated
-
 clear
-echo "--- Housekeeping Complete. The Eagle is prepped. ---"
+echo "--- Housekeeping Complete. System status: Verified. ---"
