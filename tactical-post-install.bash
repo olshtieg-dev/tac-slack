@@ -80,7 +80,7 @@ install_slackpkg_plus() {
         rm -f /tmp/slackpkg+*.t?z
         
         echo "[*] Fetching the latest slackpkg+ from Alien Bob's mirror..."
-        wget https://slackware.nl/slackpkgplus15/pkg/slackpkg+-1.8.2-noarch-1pkgplus.txz -P /tmp/
+        wget https://slackware.nl/slackpkgplus/pkg/slackpkg+-1.8.2-noarch-1alien.txz -P /tmp/
         
         if [ $? -eq 0 ]; then
             echo "[*] Installing slackpkg+..."
