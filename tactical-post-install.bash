@@ -136,7 +136,6 @@ install_multilib() {
 ## we need to do a slackpkg upgrade-all after this to get the new multilib packages, but we can do that in the main menu after all the config is done. We just want to make sure the user has the option to do it manually if they want to review the changes first.
 
 ## 
-
 install_sbotools() {
     dialog --title "sbotools" --yesno "Download and build sbotools from SlackBuilds.org?\n\n(Recommended for stable Slackware 15.0 systems)." 8 65
     if [ $? -eq 0 ]; then
@@ -145,34 +144,44 @@ install_sbotools() {
         rm -rf /tmp/sbotools /tmp/sbotools-*.t?z
         mkdir -p /tmp/sbotools && cd /tmp/sbotools
 
-        echo "[*] Downloading source from SlackBuilds.org..."
+        echo "[*] Downloading SlackBuild scripts..."
         wget https://slackbuilds.org/slackbuilds/15.0/system/sbotools.tar.gz
         
         if [ $? -eq 0 ]; then
-            echo "[*] Extracting and building..."
+            echo "[*] Extracting scripts..."
             tar -xvf sbotools.tar.gz
             cd sbotools
-            chmod +x sbotools.SlackBuild
-            ./sbotools.SlackBuild
+
+            # --- THE MISSING STEP: Download the actual source code ---
+            # The SlackBuild expects the source to be in the same directory
+            echo "[*] Fetching sbotools source code (v4.1.3)..."
+            wget https://pghvlaans.github.io/sbotools/downloads/sbotools-4.1.3.tar.gz
             
-            # Installation
-            if ls /tmp/sbotools-*.t?z 1> /dev/null 2>&1; then
-                echo "[*] Installing package..."
-                installpkg /tmp/sbotools-*.t?z
-                STATE=$?
+            if [ $? -eq 0 ]; then
+                echo "[*] Building package..."
+                chmod +x sbotools.SlackBuild
+                ./sbotools.SlackBuild
                 
-                if [ $STATE -eq 0 ]; then
-                    echo "[*] Initializing sbotools (sbosnap fetch)..."
-                    sboconfig --dist 15.0
-                    sbosnap fetch
+                # Installation
+                if ls /tmp/sbotools-*.t?z 1> /dev/null 2>&1; then
+                    echo "[*] Installing package..."
+                    installpkg /tmp/sbotools-*.t?z
+                    STATE=$?
+                    
+                    if [ $STATE -eq 0 ]; then
+                        echo "[*] Initializing sbotools (sbosnap fetch)..."
+                        sboconfig --dist 15.0
+                        sbosnap fetch
+                    fi
+                    check_status $STATE "sbotools Installation"
+                else
+                    check_status 1 "SlackBuild failed to produce a package."
                 fi
-                
-                check_status $STATE "sbotools Installation"
             else
-                check_status 1 "SlackBuild failed to produce a package."
+                check_status 1 "Failed to download sbotools source code."
             fi
         else
-            check_status 1 "Failed to download sbotools.tar.gz"
+            check_status 1 "Failed to download sbotools SlackBuild scripts."
         fi
 
         # Cleanup
