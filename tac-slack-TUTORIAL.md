@@ -1,5 +1,5 @@
-# Tac-Slack: Ninja Training Manual
-
+# Tac-Slack: 5 Ninjas in trenchcoat Training Manual
+Here are the keys to uncle papi's old hotrod of an operating system.
 So you've got the hotrod running, but you're missing a part. Here is how to use Tac-Slack to keep your system on the bleeding edge.
 
 ### 1. The Workflow
