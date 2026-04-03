@@ -1,7 +1,11 @@
 #!/bin/bash
-# Tac-Slack: The Universal Package Ninja Dispatcher
-
+# Tac-Slack: Universal Package Converter & Installer for Slackware
+# add logging and error handling to this script. We want to make sure the user knows exactly what went wrong if something fails, and we want to log all actions for troubleshooting.
 # upgradepkg --install-new ## do this later!!
+#Add:/var/log/tac-slack.log Track: conversions installs failures
+#2. Dependency resolution (future upgrade)
+
+#Right now you: detect missing libs Next level would be 👉 attempt to map missing libs → packages; Even partially = huge upgrade.
 
 # --- Functions ---
 
